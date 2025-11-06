@@ -228,8 +228,8 @@ CapsuleCollider2D:
   m_IsTrigger: 0
   m_UsedByEffector: 0
   m_UsedByComposite: 0
-  m_Offset: {x: 0, y: 0}
-  m_Size: {x: 0.5, y: 1}
+  m_Offset: {x: -0.00704062, y: 0.021121502}
+  m_Size: {x: 2.0348337, y: 3.9147758}
   m_Direction: 0
 --- !u!50 &2943476480178907385
 Rigidbody2D:
@@ -246,7 +246,7 @@ Rigidbody2D:
   m_Mass: 1
   m_LinearDrag: 0
   m_AngularDrag: 0.05
-  m_GravityScale: 1
+  m_GravityScale: 0
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -293,7 +293,7 @@ MonoBehaviour:
   visionRange: 6
   attackRange: 1.5
   repathTime: 2
-  attackCooldown: 1.5
+  attackCooldown: 3
   attackFrames: 4
 --- !u!1 &5652266203983440131
 GameObject:

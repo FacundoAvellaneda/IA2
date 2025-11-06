@@ -41,40 +41,53 @@ public class PlayerStats : MonoBehaviour, IStats
             Level++;
             PointsToSpend += 3;
 
-            OnLevelUp?.Invoke(Level);
-
             RecalculateStatsAfterLevelUp();
-
             currentHealth = maxHealth;
 
+            OnLevelUp?.Invoke(Level);
             OnStatsChanged?.Invoke();
         }
     }
-
 
     private void RecalculateStatsAfterLevelUp()
     {
-
         maxHealth += 1;
         speed += 1;
         strength += 1;
-
     }
 
-    public (int levelAfter, int pointsLeft) SpendPoints(int str, int agi, int hlt)
+    public bool SpendPoint(string statName)
     {
-        int total = str + agi + hlt;
-        if (total <= PointsToSpend)
+        if (PointsToSpend <= 0)
+            return false;
+
+        switch (statName.ToLower())
         {
-            maxHealth += hlt;
-            strength += str;
-            speed += agi;
-            PointsToSpend -= total;
+            case "maxhealth":
+                maxHealth += 1;
+                currentHealth = maxHealth;
+                break;
 
-            currentHealth = maxHealth;
+            case "strength":
+                strength += 1;
+                break;
 
-            OnStatsChanged?.Invoke();
+            case "speed":
+                speed += 1;
+                break;
+
+            default:
+                Debug.LogWarning($"[PlayerStats] Stat '{statName}' no reconocida.");
+                return false;
         }
-        return (Level, PointsToSpend);
+
+        PointsToSpend--;
+        OnStatsChanged?.Invoke();
+        return true;
+    }
+
+    public void NotifyStatsChanged()
+    {
+        OnStatsChanged?.Invoke();
     }
 }

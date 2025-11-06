@@ -11,27 +11,31 @@ public class EnemyManager : MonoBehaviour
     public Transform[] spawnPoints;
 
     [Header("Spawn Settings")]
-    public int maxEnemies = 10;         
-    public int initialActive = 3;       
-    public float spawnInterval = 2f;   
+    public int maxEnemies = 10;
+    public int initialActive = 5;
+    public float spawnInterval = 2f;
 
     [Header("Boss Settings")]
     [Range(0f, 1f)]
-    public float bossSpawnThreshold = 0.2f; 
+    public float bossSpawnThreshold = 0.2f;
     private bool bossSpawned = false;
+    private bool canSpawnEnemies = true;
 
     private List<Enemy> enemyPool = new List<Enemy>();
     private Coroutine spawnRoutine;
+    private Enemy bossInstance;
+    private int totalMaxHealthAtStart;
 
     private void Start()
     {
         CreateEnemyPool();
 
-        // Activar los primeros enemigos
+        totalMaxHealthAtStart = enemyPool.Sum(e => e.MaxHealth);
+
         for (int i = 0; i < initialActive; i++)
             ActivateEnemy();
 
-        spawnRoutine = StartCoroutine(ContinuousSpawnRoutine());
+        spawnRoutine = StartCoroutine(SpawnRoutine());
     }
 
     private void CreateEnemyPool()
@@ -42,7 +46,6 @@ public class EnemyManager : MonoBehaviour
             return;
         }
 
-        // Instanciamos todos los enemigos una sola vez
         for (int i = 0; i < maxEnemies; i++)
         {
             Enemy newEnemy = Instantiate(enemyPrefab, transform);
@@ -52,22 +55,29 @@ public class EnemyManager : MonoBehaviour
         }
     }
 
-    private IEnumerator ContinuousSpawnRoutine()
+    private IEnumerator SpawnRoutine()
     {
         while (true)
         {
             yield return new WaitForSeconds(spawnInterval);
 
-            int activeCount = enemyPool.Count(e => e.gameObject.activeInHierarchy);
-            if (activeCount < maxEnemies)
+            if (canSpawnEnemies)
                 ActivateEnemy();
 
-            CheckForBossSpawn();
+            CheckBossSpawnFromSummary();
         }
     }
 
     private void ActivateEnemy()
     {
+        var aliveEnemies = GetAliveEnemies();
+        if (aliveEnemies.Count >= maxEnemies)
+        {
+            Debug.Log(" Máximo de enemigos activos alcanzado. No se pueden spawnear más enemigos.");
+            canSpawnEnemies = false;
+            return;
+        }
+
         Enemy inactiveEnemy = enemyPool.FirstOrDefault(e => !e.gameObject.activeInHierarchy);
         if (inactiveEnemy == null) return;
 
@@ -85,31 +95,22 @@ public class EnemyManager : MonoBehaviour
         e.gameObject.SetActive(false);
     }
 
-    public List<Enemy> GetAliveEnemies()
-    {
-        return enemyPool
-            .Where(e => e != null && e.gameObject.activeInHierarchy && e.CurrentHealth > 0)
-            .ToList();
-    }
-
-    private void CheckForBossSpawn()
+    private void CheckBossSpawnFromSummary()
     {
         if (bossSpawned || bossPrefab == null)
             return;
 
-        var alive = GetAliveEnemies();
-        if (alive.Count == 0)
+        var summary = GetEnemySummary();
+        if (summary.TotalEnemies == 0)
             return;
 
-        int totalHP = alive.Sum(e => e.CurrentHealth);
-        int maxHP = alive.Sum(e => e.MaxHealth);
+        float ratio = (float)summary.TotalHealth / totalMaxHealthAtStart;
 
-        float ratio = (float)totalHP / maxHP;
-
+        Debug.Log($"{ratio}");
         if (ratio <= bossSpawnThreshold)
         {
+            Debug.Log(" Condiciones cumplidas para spawn del boss.");
             SpawnBoss();
-            bossSpawned = true;
         }
     }
 
@@ -121,24 +122,50 @@ public class EnemyManager : MonoBehaviour
             return;
         }
 
+        canSpawnEnemies = false;
+        bossSpawned = true;
+
         Vector3 spawnPos = spawnPoints[Random.Range(0, spawnPoints.Length)].position;
-        Instantiate(bossPrefab, spawnPos, Quaternion.identity);
+        bossInstance = Instantiate(bossPrefab, spawnPos, Quaternion.identity);
+        bossInstance.OnDeath += HandleBossDeath;
+
         Debug.Log(" ¡Boss Spawned!");
     }
 
-    public string GetEnemySummary()
+    private void HandleBossDeath(Enemy boss)
+    {
+        Debug.Log(" Boss derrotado. Reactivando spawner...");
+
+        bossSpawned = false;
+        canSpawnEnemies = true;
+
+        for (int i = 0; i < initialActive; i++)
+            ActivateEnemy();
+    }
+
+    public List<Enemy> GetAliveEnemies()
+    {
+        return enemyPool
+            .Where(e => e != null && e.gameObject.activeInHierarchy && e.CurrentHealth > 0)
+            .ToList();
+    }
+
+    public (string Names, int TotalHealth, int MaxHealth, int TotalEnemies) GetEnemySummary()
     {
         var alive = GetAliveEnemies();
-        if (alive.Count == 0) return "No enemies.";
+
+        if (alive.Count == 0)
+            return ("No enemies", 0, 0, 0);
 
         var summary = alive.Aggregate(
-            new { Names = "", TotalHealth = 0 },
+            new { Names = "", TotalHealth = 0, MaxHealth = 0 },
             (acc, en) => new
             {
                 Names = acc.Names + en.entityName + ", ",
-                TotalHealth = acc.TotalHealth + en.CurrentHealth
+                TotalHealth = acc.TotalHealth + en.CurrentHealth,
+                MaxHealth = acc.MaxHealth + en.MaxHealth
             });
 
-        return $"Enemies: {summary.Names} TotalHP: {summary.TotalHealth}";
+        return (summary.Names, summary.TotalHealth, summary.MaxHealth, alive.Count);
     }
 }
