@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 
 [RequireComponent(typeof(PlayerController))]
+//Juan Scarilli
 public class PlayerStats : MonoBehaviour, IStats
 {
     public int Level { get; private set; } = 1;

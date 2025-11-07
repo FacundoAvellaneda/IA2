@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+//Facundo Avellaneda
 public class EnemyManager : MonoBehaviour
 {
     [Header("Enemy Settings")]

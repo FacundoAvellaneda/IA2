@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+//Matias Avellaneda
 public class AbilitySystem : MonoBehaviour
 {
     [Header("Referencias")]
@@ -24,7 +25,7 @@ public class AbilitySystem : MonoBehaviour
     }
 
     //TIME SLICING y GENERATOR
-    //Genera las cartas de mejora una a una con retraso entre ellas
+    //Genera las cartas de mejora una a una
     public IEnumerator ShowUpgrades()
     {
         Time.timeScale = 0f;
