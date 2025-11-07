@@ -25,6 +25,12 @@ public class EnemyManager : MonoBehaviour
     private Coroutine spawnRoutine;
     private Enemy bossInstance;
     private int totalMaxHealthAtStart;
+    private AbilitySystem abilitySystem;
+
+    private void Awake()
+    {
+        abilitySystem = FindObjectOfType<AbilitySystem>();
+    }
 
     private void Start()
     {
@@ -35,6 +41,7 @@ public class EnemyManager : MonoBehaviour
         for (int i = 0; i < initialActive; i++)
             ActivateEnemy();
 
+        // TIME SLICING: se inicia una coroutine que reparte la carga de spawn en el tiempo
         spawnRoutine = StartCoroutine(SpawnRoutine());
     }
 
@@ -42,21 +49,51 @@ public class EnemyManager : MonoBehaviour
     {
         if (enemyPrefab == null)
         {
-            Debug.LogError(" Enemy prefab no asignado en EnemyManager.");
+            Debug.LogError("Enemy prefab no asignado en EnemyManager.");
             return;
         }
 
-        for (int i = 0; i < maxEnemies; i++)
+        int index = 0;
+        foreach (var modifiers in GenerateEnemyModifiers(maxEnemies))
         {
             Enemy newEnemy = Instantiate(enemyPrefab, transform);
             newEnemy.gameObject.SetActive(false);
+
+            newEnemy.SetMaxHealth(Mathf.RoundToInt(newEnemy.MaxHealth * modifiers.hpMultiplier));
+            newEnemy.health = newEnemy.MaxHealth;
+
+            var collider = newEnemy.GetComponentInChildren<CombatCollider>();
+            if (collider != null)
+            {
+                collider.SetDamage(Mathf.RoundToInt(collider.damage * modifiers.damageMultiplier));
+            }
+
             newEnemy.OnDeath += HandleEnemyDeath;
             enemyPool.Add(newEnemy);
+
+            Debug.Log($"Enemigo {index} creado con HP={newEnemy.MaxHealth} y daño={collider?.damage}");
+            index++;
+        }
+
+        Debug.Log($"{enemyPool.Count} enemigos generados.");
+    }
+
+    //Generator que crea modificadores aleatorios para los enemigos
+    private IEnumerable<(float hpMultiplier, float damageMultiplier)> GenerateEnemyModifiers(int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            float hpMult = Random.Range(0.8f, 1.5f);
+            float dmgMult = Random.Range(0.9f, 1.4f);
+
+            yield return (hpMult, dmgMult); 
         }
     }
 
     private IEnumerator SpawnRoutine()
     {
+        // TIME SLICING FUNCTION
+        // Spawn de enemigos en el pool
         while (true)
         {
             yield return new WaitForSeconds(spawnInterval);
@@ -71,16 +108,18 @@ public class EnemyManager : MonoBehaviour
     private void ActivateEnemy()
     {
         var aliveEnemies = GetAliveEnemies();
+
         if (aliveEnemies.Count >= maxEnemies)
         {
-            Debug.Log(" Máximo de enemigos activos alcanzado. No se pueden spawnear más enemigos.");
+            Debug.Log("Máximo de enemigos activos alcanzado. No se pueden spawnear más enemigos.");
             canSpawnEnemies = false;
             return;
         }
 
+        // LINQ (Group 3: FirstOrDefault)
+        // Busca el primer enemigo inactivo en la lista del pool
         Enemy inactiveEnemy = enemyPool.FirstOrDefault(e => !e.gameObject.activeInHierarchy);
         if (inactiveEnemy == null) return;
-
         if (spawnPoints == null || spawnPoints.Length == 0) return;
 
         Vector3 spawnPos = spawnPoints[Random.Range(0, spawnPoints.Length)].position;
@@ -100,6 +139,8 @@ public class EnemyManager : MonoBehaviour
         if (bossSpawned || bossPrefab == null)
             return;
 
+        // Uso de TUPLA
+        // Utilizacion de una tupla obtener los enemigos vivos y verificaar su salud total
         var summary = GetEnemySummary();
         if (summary.TotalEnemies == 0)
             return;
@@ -109,7 +150,6 @@ public class EnemyManager : MonoBehaviour
         Debug.Log($"{ratio}");
         if (ratio <= bossSpawnThreshold)
         {
-            Debug.Log(" Condiciones cumplidas para spawn del boss.");
             SpawnBoss();
         }
     }
@@ -118,7 +158,6 @@ public class EnemyManager : MonoBehaviour
     {
         if (spawnPoints == null || spawnPoints.Length == 0)
         {
-            Debug.LogWarning(" No hay puntos de spawn para el boss.");
             return;
         }
 
@@ -128,16 +167,15 @@ public class EnemyManager : MonoBehaviour
         Vector3 spawnPos = spawnPoints[Random.Range(0, spawnPoints.Length)].position;
         bossInstance = Instantiate(bossPrefab, spawnPos, Quaternion.identity);
         bossInstance.OnDeath += HandleBossDeath;
-
-        Debug.Log(" ¡Boss Spawned!");
     }
 
     private void HandleBossDeath(Enemy boss)
     {
-        Debug.Log(" Boss derrotado. Reactivando spawner...");
-
         bossSpawned = false;
         canSpawnEnemies = true;
+
+        StartCoroutine(abilitySystem.ShowUpgrades());
+        StartCoroutine(AdjustEnemyDamageOverTime());
 
         for (int i = 0; i < initialActive; i++)
             ActivateEnemy();
@@ -145,6 +183,8 @@ public class EnemyManager : MonoBehaviour
 
     public List<Enemy> GetAliveEnemies()
     {
+        // LINQ (Group 1: Where y ToList)
+        // Filtra los enemigos vivos
         return enemyPool
             .Where(e => e != null && e.gameObject.activeInHierarchy && e.CurrentHealth > 0)
             .ToList();
@@ -157,6 +197,8 @@ public class EnemyManager : MonoBehaviour
         if (alive.Count == 0)
             return ("No enemies", 0, 0, 0);
 
+        //TIPO ANONIMO
+        // Agrega la informacion de los enemigos vivos
         var summary = alive.Aggregate(
             new { Names = "", TotalHealth = 0, MaxHealth = 0 },
             (acc, en) => new
@@ -166,6 +208,32 @@ public class EnemyManager : MonoBehaviour
                 MaxHealth = acc.MaxHealth + en.MaxHealth
             });
 
+        // TUPPLA con informacion resumida de los enemigos 
         return (summary.Names, summary.TotalHealth, summary.MaxHealth, alive.Count);
+    }
+
+    private IEnumerator AdjustEnemyDamageOverTime()
+    {
+        // Ordenar los enemigos vivos segun su salud actual (de menor a mayor)
+        var orderedEnemies = GetAliveEnemies()
+            .OrderBy(e => e.CurrentHealth) // Grupo 2 (OrderBy)
+            .ToList();                      // Grupo 3 (ToList)
+
+        foreach (var enemy in orderedEnemies)
+        {
+            var combatCollider = enemy.GetComponentInChildren<CombatCollider>();
+            if (combatCollider == null)
+            {
+                continue;
+            }
+
+            float healthRatio = (float)enemy.CurrentHealth / enemy.MaxHealth;
+
+            int adjustedDamage = Mathf.RoundToInt(Mathf.Lerp(10, 40, healthRatio));
+
+            combatCollider.SetDamage(adjustedDamage);
+
+            yield return null;
+        }
     }
 }

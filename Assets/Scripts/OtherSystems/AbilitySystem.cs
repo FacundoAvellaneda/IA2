@@ -7,86 +7,110 @@ public class AbilitySystem : MonoBehaviour
 {
     [Header("Referencias")]
     [SerializeField] private PlayerStats playerStats;
-    [SerializeField] private GameObject abilityUIPanel;
+    [SerializeField] private GameObject upgradePanel;
+    [SerializeField] private Transform cardParent;
+    [SerializeField] private UpgradeCardUI cardPrefab;
 
     [Header("Configuración")]
-    [SerializeField] private int abilityChoices = 3;
-    [SerializeField] private float revealDelay = 0.5f;
+    [SerializeField] private int upgradesToShow = 3;
+    [SerializeField] private float revealDelay = 0.3f;
 
-    private List<AbilityData> allAbilities = new List<AbilityData>();
-    private List<AbilityData> currentChoices = new List<AbilityData>();
+    [SerializeField] private List<AbilityData> allAbilities = new List<AbilityData>();
+    private List<AbilityData> acquiredAbilities = new List<AbilityData>();
 
     private void Start()
     {
-        allAbilities = GenerateAbilities().ToList();
+        upgradePanel.SetActive(false);
     }
 
-    private IEnumerable<AbilityData> GenerateAbilities()
+    //TIME SLICING y GENERATOR
+    //Genera las cartas de mejora una a una con retraso entre ellas
+    public IEnumerator ShowUpgrades()
     {
-        yield return new AbilityData("Fuerza del Dragón", "Aumenta daño", 10, 0, 0, "Incrementa el daño base en 10 puntos.");
-        yield return new AbilityData("Reflejo Áureo", "Aumenta velocidad", 0, 2, 0, "Aumenta la velocidad en +2.");
-        yield return new AbilityData("Escama Ancestral", "Aumenta vida", 0, 0, 20, "Aumenta la vida máxima en 20 puntos.");
-        yield return new AbilityData("Llama Carmesí", "Ataque especial", 25, 0, 0, "Permite lanzar un ataque ardiente con +25 daño.");
-        yield return new AbilityData("Vínculo Dorado", "Defensa", 0, 0, 10, "Aumenta la regeneración de vida.");
-    }
+        Time.timeScale = 0f;
+        upgradePanel.SetActive(true);
 
-    public IEnumerator ShowRandomAbilities()
-    {
-        abilityUIPanel.SetActive(true);
-        currentChoices.Clear();
+        foreach (Transform t in cardParent)
+            Destroy(t.gameObject);
 
-        // Group1: OrderBy + Take
-        var selected = allAbilities
-            .OrderBy(a => Random.value)  
-            .Take(abilityChoices)       
+        //LINQ Grupo 1: Where / Any / Take
+        //Filtra las habilidades no adquiridas y selecciona aleatoriamente algunas para mostrar
+        var available = allAbilities
+            .Where(u => !acquiredAbilities.Any(a => a.id == u.id))
+            .OrderBy(u => Random.value)
+            .Take(upgradesToShow)
             .ToList();
 
-        // Group2: Aggregate -> sumar atributos totales como curiosidad
-        int totalBuff = selected.Aggregate(0, (acc, ab) => acc + ab.damageBonus + ab.healthBonus + ab.speedBonus);
-        Debug.Log($"?? Habilidades generadas. Buff total combinado = {totalBuff}");
-
-        // Group3: Skip/Take (time slicing para efecto de aparición progresiva)
-        for (int i = 0; i < selected.Count; i++)
+        foreach (var ability in available)
         {
-            var ability = selected.Skip(i).Take(1).First();
-            currentChoices.Add(ability);
-            Debug.Log($"?? Nueva habilidad disponible: {ability.name} ({ability.description})");
-
-            yield return new WaitForSeconds(revealDelay);
+            var card = Instantiate(cardPrefab, cardParent);
+            card.Setup(ability, this);
+            yield return new WaitForSecondsRealtime(revealDelay);
         }
     }
 
-    // =========================================================
-    // ?? Tupla que devuelve información de la habilidad elegida
-    // =========================================================
-    public (string name, string desc, int dmg, int spd, int hp) SelectAbility(int index)
+    public void SelectUpgrade(AbilityData ability)
     {
-        if (index < 0 || index >= currentChoices.Count)
+        //LINQ Grupo 1: FirstOrDefault
+        var existing = acquiredAbilities.FirstOrDefault(u => u.id == ability.id);
+
+        if (existing != null)
         {
-            Debug.LogWarning("? Índice de habilidad inválido.");
-            return ("", "", 0, 0, 0);
+            foreach (var effect in ability.effects)
+            {
+                var match = existing.effects.Find(e => e.stat == effect.stat);
+                if (match.stat != 0)
+                {
+                    match.amount += effect.amount;
+                }
+                else
+                {
+                    existing.effects.Add(effect);
+                }
+            }
+            ApplyAbilityEffect(existing);
+        }
+        else
+        {
+            acquiredAbilities.Add(ability);
+            ApplyAbilityEffect(ability);
         }
 
-        var chosen = currentChoices[index];
-        ApplyAbilityToPlayer(chosen);
-
-        return (chosen.name, chosen.description, chosen.damageBonus, chosen.speedBonus, chosen.healthBonus);
+        ClosePanel();
     }
 
-    private void ApplyAbilityToPlayer(AbilityData ability)
+    private void ApplyAbilityEffect(AbilityData ability)
     {
-        if (playerStats == null) return;
-
-        playerStats.strength += ability.damageBonus / 2;
-        playerStats.speed += ability.speedBonus;
-        playerStats.maxHealth += ability.healthBonus;
-        playerStats.currentHealth = Mathf.Min(playerStats.currentHealth + ability.healthBonus, playerStats.maxHealth);
-
-        Debug.Log($" Habilidad adquirida: {ability.name} — {ability.description}");
+        foreach (var effect in ability.effects)
+        {
+            switch (effect.stat)
+            {
+                case StatType.Strength:
+                    playerStats.strength += effect.amount;
+                    break;
+                case StatType.Speed:
+                    playerStats.speed += effect.amount;
+                    break;
+                case StatType.MaxHealth:
+                    playerStats.maxHealth += effect.amount;
+                    playerStats.currentHealth = playerStats.maxHealth;
+                    break;
+            }
+        }
 
         playerStats.NotifyStatsChanged();
+    }
 
-        abilityUIPanel?.SetActive(false);
+    // LINQ Grupo 1: Select
+    // Crea una descripción legible de los efectos de la habilidad
+    private string DescribeAbility(AbilityData ability)
+    {
+        return string.Join(", ", ability.effects.Select(e => $"+{e.amount} {e.stat}"));
+    }
+
+    private void ClosePanel()
+    {
+        upgradePanel.SetActive(false);
+        Time.timeScale = 1f;
     }
 }
-

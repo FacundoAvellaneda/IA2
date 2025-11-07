@@ -2,23 +2,30 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-[System.Serializable]
-public class AbilityData
+[CreateAssetMenu(fileName = "NewAbility", menuName = "Abilities/New Ability", order = 0)]
+public class AbilityData: ScriptableObject
 {
-    public string name;
-    public string type;
-    public int damageBonus;
-    public int speedBonus;
-    public int healthBonus;
-    public string description;
+    [Header("Información básica")]
+    public string id;
+    public string abilityName;
+    [TextArea] public string description;
+    public Sprite icon;
 
-    public AbilityData(string name, string type, int dmg, int spd, int hp, string desc)
-    {
-        this.name = name;
-        this.type = type;
-        this.damageBonus = dmg;
-        this.speedBonus = spd;
-        this.healthBonus = hp;
-        this.description = desc;
-    }
+    [Header("Efectos que aplica")]
+    public List<StatEffect> effects = new List<StatEffect>();
+}
+
+[System.Serializable]
+public struct StatEffect
+{
+    public StatType stat;
+    public int amount;
+}
+
+
+public enum StatType
+{
+    Strength,
+    Speed,
+    MaxHealth
 }

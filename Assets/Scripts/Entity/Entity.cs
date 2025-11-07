@@ -35,4 +35,10 @@ public abstract class Entity : MonoBehaviour, Idamageable
 
     public int GetCurrentHealth() => currentHealth;
     public int GetMaxHealth() => maxHealth;
+
+    public void SetMaxHealth(int value)
+    {
+        maxHealth = value;
+        currentHealth = Mathf.Min(currentHealth, maxHealth);
+    }
 }

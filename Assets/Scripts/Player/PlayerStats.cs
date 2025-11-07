@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 [RequireComponent(typeof(PlayerController))]
@@ -41,7 +42,13 @@ public class PlayerStats : MonoBehaviour, IStats
             Level++;
             PointsToSpend += 3;
 
-            RecalculateStatsAfterLevelUp();
+            // Obtener el siguiente modificador
+            var mod = GetStatModifiers().FirstOrDefault(m => m.level == Level);
+            if (mod != default)
+            {
+                ApplyLevelModifier(mod);
+            }
+
             currentHealth = maxHealth;
 
             OnLevelUp?.Invoke(Level);
@@ -49,11 +56,29 @@ public class PlayerStats : MonoBehaviour, IStats
         }
     }
 
-    private void RecalculateStatsAfterLevelUp()
+    private void ApplyLevelModifier((int level, int health, int strength, int speed) mod)
     {
-        maxHealth += 1;
-        speed += 1;
-        strength += 1;
+        maxHealth += mod.health;
+        strength += mod.strength;
+        speed += mod.speed;
+    }
+
+    // GENERATOR
+    // Produce secuencialmente los modificadores por nivel
+    public IEnumerable<(int level, int health, int strength, int speed)> GetStatModifiers()
+    {
+        int level = 1;
+
+        while (true)
+        {
+            int healthBonus = Mathf.FloorToInt(2 + level * 2f);  
+            int strengthBonus = (level % 2 == 0) ? 1 : 0;          
+            int speedBonus = (level % 3 == 0) ? 1 : 0;            
+
+            yield return (level, healthBonus, strengthBonus, speedBonus);
+
+            level++;
+        }
     }
 
     public bool SpendPoint(string statName)
@@ -89,5 +114,12 @@ public class PlayerStats : MonoBehaviour, IStats
     public void NotifyStatsChanged()
     {
         OnStatsChanged?.Invoke();
+    }
+
+    //TUPLA
+    //Devuelve las estadísticas como una tupla
+    public (int Health, int Strength, int Speed) GetStatsTuple()
+    {
+        return (maxHealth, strength, speed);
     }
 }
